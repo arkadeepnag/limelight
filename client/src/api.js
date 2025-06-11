@@ -139,26 +139,38 @@ export const searchVideos = (query) =>
             console.error('Search error:', err.message);
             return { error: err.message };
         });
-export const unsubscribe = (uploaderId, token) =>
+export const unsubscribe = (uploaderId, userId, token) =>
     fetch(`${API_BASE}/user/unsubscribe`, {
         method: 'POST',
-        subscriberId: token,
-        targetUserId: uploaderId,
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+            subscriberId: userId,
+            targetUserId: uploaderId,
+        }),
     }).then(res => {
         if (!res.ok) throw new Error('Failed to unsubscribe');
         return res.json();
     });
-export const subscribe = (uploaderId, token) =>
-    fetch(`${API_BASE}/user/unsubscribe`, {
+
+export const subscribe = (uploaderId, userId, token) =>
+    fetch(`${API_BASE}/user/subscribe`, {
         method: 'POST',
-        subscriberId: token,
-        targetUserId: uploaderId,
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+            subscriberId: userId,     // Ensure `token` is actually the user ID here
+            targetUserId: uploaderId
+        }),
     }).then(res => {
-        if (!res.ok) throw new Error('Failed to unsubscribe');
+        if (!res.ok) throw new Error('Failed to subscribe');
         return res.json();
     });
+
 export const getAllComments = async (videoId, limit = 10, skip = 0, token) => {
     const res = await fetch(`${API_BASE}/videos/${videoId}/comments?=${limit}&skip=${skip}`, {
         headers: {
@@ -167,4 +179,22 @@ export const getAllComments = async (videoId, limit = 10, skip = 0, token) => {
     });
     if (!res.ok) throw new Error('Failed to fetch comments');
     return res.json();
+};
+export const updateProfileImage = async (profilePicFile, bannerFile, userId, token) => {
+    const formData = new FormData();
+
+    if (profilePicFile) formData.append('profilePicture', profilePicFile);
+    if (bannerFile) formData.append('banner', bannerFile);
+    formData.append('userId', userId); // append manually
+
+    return fetch(`${API_BASE}/user/update-profile-images`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${token}`, // Only Authorization header is needed
+        },
+        body: formData,
+    }).then(res => {
+        if (!res.ok) throw new Error('Failed to update profile images');
+        return res.json();
+    });
 };

@@ -28,32 +28,223 @@ export const getAllVideos = async (req, res) => {
 
   res.json(videosWithSubCount);
 };
-
 export const getSuggestedVideos = async (req, res) => {
-  const videos = await Video.aggregate([
-    { $sample: { size: 5 } }
-  ]);
+  try {
+    const userId = req.userId;
 
-  // Since aggregate returns plain docs without population,
-  // we need to populate uploadedBy here
+    const user = await User.findById(userId).select('watchHistory likedVideos').lean();
 
-  // Populate manually with mongoose
-  await Video.populate(videos, { path: 'uploadedBy', select: 'name profilePicture subscribers' });
+    const seenVideoIds = user ? user.watchHistory.map(h => h.video.toString()) : [];
 
-  // Add subscriberCount
-  const videosWithSubCount = videos.map(video => {
-    const subscriberCount = video.uploadedBy?.subscribers?.length || 0;
-    return {
+    const suggestions = new Map();
+
+    // --- STRATEGY 1: Personalized - Videos related to hashtags in liked/watch history ---
+    if (user && user.likedVideos.length > 0) {
+      const likedVideos = await Video.find({ _id: { $in: user.likedVideos } }).select('hashtags').lean();
+      const hashtagCounts = {};
+
+      for (const video of likedVideos) {
+        if (video.hashtags) {
+          for (const tag of video.hashtags) {
+            hashtagCounts[tag] = (hashtagCounts[tag] || 0) + 1;
+          }
+        }
+      }
+
+      const topHashtags = Object.entries(hashtagCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([tag]) => tag);
+
+      if (topHashtags.length > 0) {
+        const relatedByTags = await Video.find({
+          hashtags: { $in: topHashtags },
+          _id: { $nin: seenVideoIds }
+        }).limit(20).lean();
+
+        for (const video of relatedByTags) {
+          suggestions.set(video._id.toString(), { video, score: 5 });
+        }
+      }
+    }
+
+    // --- STRATEGY 2: Collaborative - Videos liked by people with similar tastes ---
+    if (user && user.likedVideos.length > 0) {
+      const similarUsers = await User.aggregate([
+        { $match: { likedVideos: { $in: user.likedVideos.map(id => new mongoose.Types.ObjectId(id)) } } },
+        { $unwind: '$likedVideos' },
+        { $group: { _id: '$likedVideos', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 30 }
+      ]);
+
+      const videoIds = similarUsers.map(item => item._id);
+      const similarVideos = await Video.find({ _id: { $in: videoIds, $nin: seenVideoIds } }).lean();
+
+      const videoMap = new Map(similarVideos.map(v => [v._id.toString(), v]));
+
+      for (const item of similarUsers) {
+        const id = item._id.toString();
+        if (videoMap.has(id)) {
+          const video = videoMap.get(id);
+          const existing = suggestions.get(id);
+          const score = (existing?.score || 0) + item.count * 10;
+          suggestions.set(id, { video, score });
+        }
+      }
+    }
+
+    // --- STRATEGY 3: Trending (Fallback or additional) ---
+    if (suggestions.size < 10) {
+      const trending = await Video.find({ _id: { $nin: seenVideoIds } })
+        .sort({ trendingScore: -1 })
+        .limit(10)
+        .lean();
+
+      for (const video of trending) {
+        if (!suggestions.has(video._id.toString())) {
+          suggestions.set(video._id.toString(), { video, score: 1 });
+        }
+      }
+    }
+
+    // --- Finalize ---
+    let finalSuggestions = Array.from(suggestions.values());
+    finalSuggestions.sort((a, b) => b.score - a.score);
+    let videosToRespond = finalSuggestions.map(item => item.video);
+
+    await Video.populate(videosToRespond, {
+      path: 'uploadedBy',
+      select: 'name profilePicture subscribers'
+    });
+
+    const result = videosToRespond.map(video => ({
       ...video,
       uploadedBy: {
         ...video.uploadedBy,
-        subscriberCount,
+        subscriberCount: video.uploadedBy?.subscribers?.length || 0,
       }
-    };
-  });
+    }));
 
-  res.json(videosWithSubCount);
+    res.json(result);
+
+  } catch (err) {
+    console.error('Failed to get homepage suggestions:', err);
+    res.status(500).json({ message: 'Server error while generating homepage suggestions.' });
+  }
 };
+
+export const getSuggestedVideosForVideo = async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    // Assumes you have authentication middleware that adds the userId to the request object.
+    const userId = req.userId;
+
+    // Fetch the current user's watch history and the current video's data in parallel.
+    const [currentUser, currentVideo] = await Promise.all([
+      User.findById(userId).select('watchHistory likedVideos').lean(),
+      Video.findById(videoId).select('hashtags uploadedBy likes').lean()
+    ]);
+
+    if (!currentVideo) {
+      return res.status(404).json({ message: 'The video you are watching could not be found.' });
+    }
+
+    // Create a list of videos the user has already seen to avoid recommending them again.
+    const seenVideoIds = currentUser ? currentUser.watchHistory.map(h => h.video.toString()) : [];
+    seenVideoIds.push(videoId); // Also exclude the currently playing video.
+
+    // Use a Map to store suggestions and their scores to prevent duplicates and rank them.
+    const suggestions = new Map();
+
+    // --- STRATEGY 1: CONTENT-BASED (Videos with similar hashtags) ---
+    if (currentVideo.hashtags && currentVideo.hashtags.length > 0) {
+      const relatedByTag = await Video.find({
+        hashtags: { $in: currentVideo.hashtags },
+        _id: { $nin: seenVideoIds }
+      }).limit(10).lean();
+
+      for (const video of relatedByTag) {
+        // Give a base score for a content match.
+        suggestions.set(video._id.toString(), { video, score: 5 });
+      }
+    }
+
+    // --- STRATEGY 2: COLLABORATIVE FILTERING (Users who liked this also liked...) ---
+    if (currentVideo.likes && currentVideo.likes.length > 0) {
+      const otherUserIds = currentVideo.likes.map(id => id.toString()).filter(id => id !== userId);
+
+      if (otherUserIds.length > 0) {
+        // Find all videos liked by these "similar" users.
+        const likedBySimilarUsers = await User.aggregate([
+          { $match: { _id: { $in: otherUserIds.map(id => new mongoose.Types.ObjectId(id)) } } },
+          { $unwind: '$likedVideos' }, // Deconstruct the likedVideos array
+          { $group: { _id: '$likedVideos', count: { $sum: 1 } } }, // Count how many similar users liked each video
+          { $sort: { count: -1 } }, // The most co-liked videos are most relevant
+          { $limit: 20 }
+        ]);
+
+        const videoIds = likedBySimilarUsers.map(item => item._id);
+        const populatedVideos = await Video.find({ _id: { $in: videoIds, $nin: seenVideoIds } }).lean();
+        const videoMap = new Map(populatedVideos.map(v => [v._id.toString(), v]));
+
+        for (const item of likedBySimilarUsers) {
+          const videoIdStr = item._id.toString();
+          if (videoMap.has(videoIdStr)) {
+            const video = videoMap.get(videoIdStr);
+            const existing = suggestions.get(videoIdStr);
+            // Boost score heavily for collaborative matches, or add it if new.
+            const newScore = (existing ? existing.score : 0) + item.count * 10;
+            suggestions.set(videoIdStr, { video, score: newScore });
+          }
+        }
+      }
+    }
+
+    // --- STRATEGY 3: FALLBACK (Trending videos if no other suggestions found) ---
+    if (suggestions.size === 0) {
+      const trendingVideos = await Video.find({ _id: { $nin: seenVideoIds } })
+        .sort({ trendingScore: -1 })
+        .limit(10)
+        .lean();
+
+      for (const video of trendingVideos) {
+        suggestions.set(video._id.toString(), { video, score: 1 });
+      }
+    }
+
+    // --- FINALIZE AND RESPOND ---
+    let finalSuggestions = Array.from(suggestions.values());
+
+    // Sort all collected suggestions by their final calculated score.
+    finalSuggestions.sort((a, b) => b.score - a.score);
+
+    // Extract just the video documents from the scored results.
+    let videosToRespond = finalSuggestions.map(item => item.video);
+
+    // Populate the uploader information for the final list.
+    await Video.populate(videosToRespond, {
+      path: 'uploadedBy',
+      select: 'name profilePicture subscribers'
+    });
+
+    // Manually add the subscriberCount to each video's uploader field.
+    const result = videosToRespond.map(video => ({
+      ...video,
+      uploadedBy: {
+        ...video.uploadedBy,
+        subscriberCount: video.uploadedBy?.subscribers?.length || 0,
+      }
+    }));
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('Failed to get suggested videos:', error);
+    res.status(500).json({ message: 'Server error while getting suggestions.' });
+  }
+};
+
 export const getAllComments = async (req, res) => {
   try {
     const skip = parseInt(req.query.skip) || 0;
@@ -136,12 +327,20 @@ export const getVideoById = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+import { generateTranscript } from '../services/transcriptService.js';
 
 const resolutions = {
   '360p': '640x360',
   '480p': '854x480',
   '720p': '1280x720',
   '1080p': '1920x1080',
+};
+
+const extractHashtags = (text) => {
+  if (!text) return [];
+  const hashtagRegex = /#(\w+)/g;
+  const matches = text.match(hashtagRegex) || [];
+  return matches.map(tag => tag.substring(1).toLowerCase());
 };
 
 export const uploadVideo = async (req, res) => {
@@ -156,7 +355,7 @@ export const uploadVideo = async (req, res) => {
     const videoDir = path.join('uploads', 'hls', videoId);
     await fs.ensureDir(videoDir);
 
-    // 🔁 HLS conversion (faster: remove redundant params, optimized for speed)
+    // 🔁 HLS conversion
     const tasks = Object.entries(resolutions).map(([label, size]) => {
       return new Promise((resolve, reject) => {
         const resDir = path.join(videoDir, label);
@@ -199,18 +398,16 @@ export const uploadVideo = async (req, res) => {
       }[label];
       return `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolutions[label]}\n${label}/index.m3u8`;
     }).join('\n');
-
     const masterPlaylistPath = path.join(videoDir, 'master.m3u8');
     await fs.writeFile(masterPlaylistPath, '#EXTM3U\n' + masterPlaylist);
 
-    // 📸 Thumbnail
     // 📸 Thumbnail
     const thumbnailDir = path.join('uploads', 'thumbnails');
     await fs.ensureDir(thumbnailDir);
 
     let thumbnailPath;
     if (thumbnailFile) {
-      const ext = path.extname(thumbnailFile.originalname); // Keep original extension (.jpg, .png, etc.)
+      const ext = path.extname(thumbnailFile.originalname);
       thumbnailPath = path.join(thumbnailDir, `${videoId}${ext}`);
       await fs.move(thumbnailFile.path, thumbnailPath, { overwrite: true });
     } else {
@@ -223,20 +420,18 @@ export const uploadVideo = async (req, res) => {
             count: 1,
             filename: `${videoId}.jpg`,
             folder: thumbnailDir,
-            size: '320x?'
+            size: '320x?',
           });
       });
     }
 
-
-    // 🧠 Metadata extraction
+    // 🧠 Metadata
     const metadata = await new Promise((resolve, reject) => {
       ffmpeg.ffprobe(originalPath, (err, data) => {
         if (err) return reject(err);
         const videoStream = data.streams.find(s => s.codec_type === 'video');
         const duration = Number(data.format.duration);
         const bitrate = Number(videoStream?.bit_rate);
-
         resolve({
           duration: isNaN(duration) ? 0 : duration,
           codec: videoStream?.codec_name || 'unknown',
@@ -246,6 +441,17 @@ export const uploadVideo = async (req, res) => {
         });
       });
     });
+
+    // 🧠 Transcript generation
+    let transcript = null;
+    try {
+      transcript = await generateTranscript(originalPath, videoId);
+    } catch (err) {
+      console.error('Transcript error:', err.message);
+    }
+
+    // 🏷️ Hashtags
+    const hashtags = extractHashtags(description);
 
     // 💾 Save to DB
     const newVideo = new Video({
@@ -259,11 +465,12 @@ export const uploadVideo = async (req, res) => {
       codec: metadata.codec,
       bitrate: metadata.bitrate,
       resolution: metadata.resolution,
+      hashtags,
+      transcript,
     });
 
     await newVideo.save();
     res.status(201).json(newVideo);
-
   } catch (error) {
     console.error('Upload failed:', error);
     res.status(500).json({ message: error.message || 'Upload failed' });

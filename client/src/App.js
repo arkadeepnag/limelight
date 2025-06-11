@@ -15,8 +15,8 @@ import './App.css';
 const App = () => {
   return (
     <>
-      <ProtectedRoute><Navbar /></ProtectedRoute>
-      <ProtectedRoute><Sidebar /></ProtectedRoute>
+      <Navbar />
+      <Sidebar />
 
       <main className="mainComponent">
         <Routes>

@@ -37,7 +37,7 @@ const VideoPage = () => {
     const [hasMoreComments, setHasMoreComments] = useState(true);
     const commentLimit = 5;
     const navigate = useNavigate();
-    const token = localStorage.getItem('token');
+    const token = auth?.token;
     const userId = auth?.userId;
     const videoRef = useRef(null);
     const playerRef = useRef(null);
@@ -260,18 +260,20 @@ const VideoPage = () => {
 
 
     useEffect(() => {
+
         if (video && video.uploadedBy?.subscribers) {
-            setIsSubscribed(video.uploadedBy.subscribers.includes(userId));
+            if (video.uploadedBy.subscribers.includes(userId))
+                setIsSubscribed(true);
         }
     }, [video, userId]);
 
     const handleSubscribeToggle = async () => {
         if (!token) return alert('Login required');
-        setSubscribing(true);
+
         try {
             if (isSubscribed) {
-                await unsubscribe(video.uploadedBy._id, token);
-                setIsSubscribed(false);
+                await unsubscribe(video.uploadedBy._id, userId, token);
+
                 setVideo((v) => ({
                     ...v,
                     uploadedBy: {
@@ -279,9 +281,10 @@ const VideoPage = () => {
                         subscribers: v.uploadedBy.subscribers.filter(id => id !== userId),
                     }
                 }));
+                setIsSubscribed(false)
             } else {
-                await subscribe(video.uploadedBy._id, token);
-                setIsSubscribed(true);
+                await subscribe(video.uploadedBy._id, userId, token);
+
                 setVideo((v) => ({
                     ...v,
                     uploadedBy: {
@@ -289,6 +292,7 @@ const VideoPage = () => {
                         subscribers: [...v.uploadedBy.subscribers, userId],
                     }
                 }));
+                setIsSubscribed(true)
             }
         } catch (err) {
             alert('Subscription action failed');
@@ -347,7 +351,7 @@ const VideoPage = () => {
 
     return (
         <div className="videopageContainer">
-            <div style={{ maxWidth: '900px' }}>
+            <div style={{ maxWidth: '900px' }} className="videoContainer">
                 {video && (
                     <CustomVideoPlayer src={`http://localhost:5000/api/videos/${video._id}/master.m3u8`} />
                 )}

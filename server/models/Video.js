@@ -29,13 +29,17 @@ const videoSchema = new mongoose.Schema({
     },
     timestamp: { type: Date, default: Date.now }
   }],
-
+  hashtags: { type: [String], index: true },
+  trendingScore: { type: Number, default: 0, index: true },
+  transcript: { type: String },
+  captionPath: { type: String },
   comments: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     comment: String,
     timestamp: { type: Date, default: Date.now }
   }]
 }, { timestamps: true });
+
 
 videoSchema.index({ title: 'text', description: 'text' });
 

@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { FaRegFolder, FaInfo, FaLocationDot, FaLink, FaRegCalendar, FaPeopleRoof } from "react-icons/fa6";
 
-import { getUserInfo, getVideosByUserId, subscribe, unsubscribe } from '../api';
+import { getUserInfo, getVideosByUserId, subscribe, unsubscribe, updateProfileImage } from '../api';
 import "../styles/channel.css";
 
 const Channel = () => {
@@ -18,6 +18,30 @@ const Channel = () => {
     const [isSubscribed, setIsSubscribed] = useState(false); // New state for subscription status
     const [subscriberCount, setSubscriberCount] = useState(0); // Manage subscriber count dynamically
     const [subscribable, setSubscribable] = useState(true)
+
+    const [isEditModalOpen, setEditModalOpen] = useState(false);
+    const [newProfilePic, setNewProfilePic] = useState(null);
+    const [newBanner, setNewBanner] = useState(null);
+
+    const profileInputRef = useRef(null);
+    const bannerInputRef = useRef(null);
+    const handleSaveEdits = async () => {
+        try {
+            const data = await updateProfileImage(newProfilePic, newBanner, userId, auth.token);
+
+            setUserData(prev => ({
+                ...prev,
+                profilePicture: data.profilePicture || prev.profilePicture,
+                banner: data.banner || prev.banner,
+            }));
+
+            setEditModalOpen(false);
+        } catch (err) {
+            console.error('Error saving edits:', err.message);
+        }
+    };
+
+
     useEffect(() => {
         const fetchChannelData = async () => {
             setLoading(true);
@@ -45,15 +69,22 @@ const Channel = () => {
                 // Determine if the current user is subscribed to this channel
                 if (auth.userId && userInfo.subscribers) {
                     setIsSubscribed(userInfo.subscribers.some(
-                        (subscriber) => subscriber._id === auth.user._id // Check if auth.user is in subscribers list
+                        (subscriber) => subscriber._id === auth.userId // Check if auth.user is in subscribers list
                     ));
                 }
                 if (auth.userId == userId) {
                     setSubscribable(false)
                 }
                 // Fetch videos uploaded by this user
-                const videos = await getVideosByUserId(userId, auth.token);
-                setUserVideos(videos);
+                try {
+                    const videos = await getVideosByUserId(userId, auth.token);
+                    if (videos) {
+                        setUserVideos(videos);
+                    }
+                }
+                catch (err) {
+
+                }
 
             } catch (err) {
                 console.error('Error fetching channel data:', err);
@@ -107,7 +138,7 @@ const Channel = () => {
     }
 
     // Determine if the current user is viewing their own channel
-    const isOwner = auth.user && auth.user._id === userId;
+    const isOwner = auth.user && auth.userId === userId;
     const timeSinceUpload = (uploadDateString) => {
         const uploadDate = new Date(uploadDateString);
         const now = new Date();
@@ -169,7 +200,7 @@ const Channel = () => {
                                 Upload Video
                             </button>
                             <button
-                                onClick={() => navigate(`/edit-channel/${userId}`)} // Navigate to channel settings/edit page
+                                onClick={() => setEditModalOpen(true)}// Navigate to channel settings/edit page
                                 className="action-button edit-channel-button"
                             >
                                 Edit Channel
@@ -177,7 +208,7 @@ const Channel = () => {
                         </div>
                     ) : (
                         // Subscriber button for non-owners (and logged-in users)
-                        auth.user && ( // Ensure user is logged in
+                        auth.userId && ( // Ensure user is logged in
                             <button
                                 onClick={handleSubscribeToggle}
                                 className={`subscribe-button ${isSubscribed ? 'subscribed' : ''}`}
@@ -248,6 +279,52 @@ const Channel = () => {
 
                 </div>
             </div>
+            {isEditModalOpen && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h2>Edit Channel</h2>
+
+                        <div className="image-upload-section">
+                            <label>Banner</label>
+                            <img
+                                src={newBanner ? URL.createObjectURL(newBanner) : userData.banner}
+                                alt="Banner"
+                                className="banner-image preview"
+                                onClick={() => bannerInputRef.current.click()}
+                            />
+                            <input
+                                type="file"
+                                accept="image/*"
+                                ref={bannerInputRef}
+                                style={{ display: 'none' }}
+                                onChange={(e) => setNewBanner(e.target.files[0])}
+                            />
+                        </div>
+
+                        <div className="image-upload-section">
+                            <label>Profile Picture</label>
+                            <img
+                                src={newProfilePic ? URL.createObjectURL(newProfilePic) : userData.profilePicture}
+                                alt="Profile"
+                                className="profile-picture preview"
+                                onClick={() => profileInputRef.current.click()}
+                            />
+                            <input
+                                type="file"
+                                accept="image/*"
+                                ref={profileInputRef}
+                                style={{ display: 'none' }}
+                                onChange={(e) => setNewProfilePic(e.target.files[0])}
+                            />
+                        </div>
+
+                        <div className="modal-buttons">
+                            <button onClick={handleSaveEdits} className="save-button">Save</button>
+                            <button onClick={() => setEditModalOpen(false)} className="cancel-button">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="channel-content">
                 <h2>Videos</h2>

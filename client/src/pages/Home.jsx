@@ -85,7 +85,7 @@ const Home = () => {
     const [videos, setVideos] = useState([]);
     const [suggested, setSuggested] = useState([]);
     const [loading, setLoading] = useState(true);
-
+    console.log(suggested)
     useEffect(() => {
         const fetchAll = async () => {
             try {

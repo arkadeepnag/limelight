@@ -12,13 +12,16 @@ import authRoutes from './routes/authRoutes.js';
 import videoRoutes from './routes/videoRoutes.js';
 import searchRoutes from './routes/search.js';
 import userRoutes from './routes/userRoutes.js';
+import { startTrendingJob } from './services/trendingService.js';
 
-dotenv.config();
+
 const app = express();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+console.log("MONGO_URI loaded:", process.env.MONGO_URI);
 // Middleware
 app.use(cors());
 
@@ -49,6 +52,13 @@ app.use('/api/user', userRoutes);
 const PORT = process.env.PORT;
 // Connect to MongoDB
 
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+  console.error('❌ MONGO_URI is not defined. Check your .env file.');
+  process.exit(1);
+}
+
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
@@ -69,6 +79,12 @@ mongoose.connect(process.env.MONGO_URI)
         console.log(`Server running on port ${PORT} (Worker ${process.pid})`);
       });
     }
+    startTrendingJob();
+
+
+
+
+
 
   })
   .catch(err => console.error(err));

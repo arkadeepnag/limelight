@@ -144,3 +144,7 @@
     background: #eee;
 
 }
+
+.videoContainer {
+    flex: 3;
+}

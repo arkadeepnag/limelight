@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { getUserInfo } from '../api';
 
 const Navbar = () => {
-    const { auth, logout } = useAuth();
+    const { auth, logout, accounts, switchAccount, removeAccount } = useAuth();
     const navigate = useNavigate();
     const [userData, setUserData] = useState(null);
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -35,6 +35,19 @@ const Navbar = () => {
         navigate('/login');
     };
 
+    const handleSwitchAccount = (userId) => {
+        switchAccount(userId);
+        setDropdownOpen(false);
+        navigate('/');
+    };
+
+    const handleRemoveAccount = (userId) => {
+        removeAccount(userId);
+        if (auth?.userId === userId) {
+            navigate('/login');
+        }
+    };
+
     const handleProfileClick = () => navigate(`/channel/${auth?.userId}`);
     const handleHistoryClick = () => navigate('/watch-history');
 
@@ -49,15 +62,70 @@ const Navbar = () => {
                         className="profile-picture"
                         onClick={() => setDropdownOpen(prev => !prev)}
                     />
+
+
                     {dropdownOpen && (
                         <div className="dropdown-menu">
-                            <button onClick={handleProfileClick}>Profile</button>
-                            <button onClick={handleHistoryClick}>Watch History</button>
-                            <button onClick={handleLogout}>Logout</button>
+                            {/* Current user info */}
+                            <div className="current-user">
+                                <img src={userData.profilePicture} alt="Profile" className="dropdown-profile-pic" />
+                                <div className="user-info">
+                                    <strong>{userData.name}</strong>
+
+                                </div>
+                            </div>
+
+                            <button onClick={handleProfileClick}>👤 Profile</button>
+                            <button onClick={handleHistoryClick}>🕓 Watch History</button>
+                            <button onClick={handleLogout}>🚪 Logout</button>
+
+                            <hr />
+
+                            <div className="account-switch-section">
+                                <strong>Switch Accounts:</strong>
+                                {accounts
+                                    .filter(acc => acc.userId !== auth.userId)
+                                    .map(acc => (
+                                        <AccountItem
+                                            key={acc.userId}
+                                            account={acc}
+                                            onSwitch={handleSwitchAccount}
+                                            onRemove={handleRemoveAccount}
+                                        />
+                                    ))}
+                                <button className="add-account-button" onClick={() => navigate('/login')}>
+                                    ➕ Add Account
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
             )}
+        </div>
+    );
+};
+
+// 👤 AccountItem component to fetch name/pic for each saved account
+const AccountItem = ({ account, onSwitch, onRemove }) => {
+    const [info, setInfo] = useState(null);
+
+    useEffect(() => {
+        getUserInfo(account.userId, account.token)
+            .then(setInfo)
+            .catch(() => setInfo({ name: account.userId }));
+    }, [account]);
+
+    return (
+        <div className="switch-account-item">
+            <div className="switch-account-left" onClick={() => onSwitch(account.userId)}>
+                <img
+                    src={info?.profilePicture || '/default-avatar.png'}
+                    alt="User"
+                    className="switch-avatar"
+                />
+                <span>{info?.name || account.userId}</span>
+            </div>
+            <button className="remove-account" onClick={() => onRemove(account.userId)}>❌</button>
         </div>
     );
 };

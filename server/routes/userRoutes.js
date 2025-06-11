@@ -1,13 +1,50 @@
 import express from 'express';
-import { subscribeToUser } from '../controllers/userController.js';
+import { subscribeToUser, unsubscribeFromUser, updateProfileImages } from '../controllers/userController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import User from '../models/User.js';
 import mongoose from 'mongoose';
 import Video from '../models/Video.js';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+
 const router = express.Router();
 
 // POST /api/users/subscribe
 router.post('/subscribe', authenticate, subscribeToUser);
+router.post('/unsubscribe', authenticate, unsubscribeFromUser);
+
+// Ensure upload directories exist
+const profileDir = 'uploads/profile';
+const bannerDir = 'uploads/banner';
+if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
+if (!fs.existsSync(bannerDir)) fs.mkdirSync(bannerDir, { recursive: true });
+
+// Set up Multer storage
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const isProfile = file.fieldname === 'profilePicture';
+        cb(null, isProfile ? profileDir : bannerDir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        const uniqueName = `${file.fieldname}-${Date.now()}${ext}`;
+        cb(null, uniqueName);
+    }
+});
+
+const upload = multer({ storage });
+
+// Route with multer, auth, and controller
+router.post(
+    '/update-profile-images',
+    authenticate,
+    upload.fields([
+        { name: 'profilePicture', maxCount: 1 },
+        { name: 'banner', maxCount: 1 }
+    ]),
+    updateProfileImages
+);
 router.get('/:id', authenticate, async (req, res) => {
     try {
         const user = await User.findById(req.params.id)

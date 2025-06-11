@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { uploadVideo } from '../api';
 
+import { useAuth } from '../context/AuthContext';
 const Upload = () => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -11,10 +12,11 @@ const Upload = () => {
     const [videoInfo, setVideoInfo] = useState(null);
     const navigate = useNavigate();
 
+    const { auth, logout } = useAuth();
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        const token = localStorage.getItem('token');
+        const token = auth?.token;
         if (!token) {
             alert('Login required');
             return;
