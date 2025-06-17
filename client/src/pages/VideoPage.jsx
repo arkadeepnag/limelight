@@ -9,7 +9,7 @@ import {
     getVideo, deleteVideo, likeVideo, dislikeVideo,
     addComment, getComments, watchVideo, subscribe, unsubscribe, getAllComments
 } from '../api';
-import { BiLike, BiDislike, BiBookmark, BiShareAlt } from "react-icons/bi";
+import { BiLike, BiDislike, BiBookmark, BiShareAlt, BiSolidLike, BiSolidDislike } from "react-icons/bi";
 import { FaArrowUp, FaArrowUpAZ } from "react-icons/fa6";
 
 import { useAuth } from '../context/AuthContext';
@@ -385,9 +385,22 @@ const VideoPage = () => {
                         )}
                     </div>
                     <div className="likesSection">
-                        <button className={likeState.likes.includes(userId) ? "likeBtn liked" : "likeBtn"} onClick={handleLike}><BiLike /> {likeState.likes.length}</button>
-                        <button className={likeState.dislikes.includes(userId) ? "likeBtn liked" : "likeBtn"} onClick={handleDislike}>
-                            <BiDislike /> {likeState.dislikes.length}
+                        <button
+                            className={likeState.likes.includes(userId) ? "likeBtn liked" : "likeBtn"}
+                            onClick={handleLike}
+                        >
+                            {/* Conditionally render filled or outline icon for Like */}
+                            {likeState.likes.includes(userId) ? <BiSolidLike /> : <BiLike />}
+                            {likeState.likes.length}
+                        </button>
+
+                        <button
+                            className={likeState.dislikes.includes(userId) ? "likeBtn liked" : "likeBtn"}
+                            onClick={handleDislike}
+                        >
+                            {/* Conditionally render filled or outline icon for Dislike */}
+                            {likeState.dislikes.includes(userId) ? <BiSolidDislike /> : <BiDislike />}
+                            {likeState.dislikes.length}
                         </button>
                         <button className="likeBtn">
                             <BiBookmark /> Save

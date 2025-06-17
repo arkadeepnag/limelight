@@ -132,7 +132,7 @@ const CustomVideoPlayer = ({ src, poster = '', transcript = [] }) => {
         const timeline = timelineRef.current;
         if (!timeline) return;
         const percentage = duration > 0 ? (currentTime / duration) * 100 : 0;
-        timeline.style.background = `linear-gradient(to right, #F2A224 ${percentage}%, rgba(255, 255, 255, 0.4) ${percentage}%)`;
+        timeline.style.background = `linear-gradient(to right, #7602c9 ${percentage}%, rgba(255, 255, 255, 0.4) ${percentage}%)`;
     }, [currentTime, duration]);
 
     useEffect(() => {
@@ -288,7 +288,7 @@ const CustomVideoPlayer = ({ src, poster = '', transcript = [] }) => {
                             )}
                         </div>
                         <button className="control-button" onClick={() => setCaptionsEnabled(prev => !prev)}>
-                            <BiCaptions color={captionsEnabled ? "#F2A224" : "#999"} />
+                            <BiCaptions color={captionsEnabled ? "#7602c9" : "#999"} />
                         </button>
                         <button className="control-button" onClick={toggleFullscreen}>{isFullscreen ? <BiExitFullscreen /> : <BiExpandAlt />}</button>
                     </div>

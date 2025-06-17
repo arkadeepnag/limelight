@@ -86,7 +86,7 @@
     appearance: none;
     width: 14px;
     height: 14px;
-    background: #F2A224;
+    background: var(--default-color);
     /* A gradient from a vibrant blue to a deep purple */
 
     border-radius: 50%;
@@ -103,7 +103,7 @@
 .timeline::-moz-range-thumb {
     width: 14px;
     height: 14px;
-    background: #F2A224;
+    background: var(--default-color);
     /* A gradient from a vibrant blue to a deep purple */
 
     border-radius: 50%;
@@ -123,7 +123,7 @@
 }
 
 .timeline::-moz-range-progress {
-    background: #F2A224;
+    background: var(--default-color);
     /* A gradient from a vibrant blue to a deep purple */
 
     height: 100%;

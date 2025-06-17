@@ -1,5 +1,5 @@
 import "../styles/sidebar.css";
-import { BiSolidCollection, BiSolidCabinet, BiLogoYoutube } from "react-icons/bi";
+import { BiSolidCollection, BiSolidCabinet, BiMenuAltLeft } from "react-icons/bi";
 import { FaHashtag, FaHouse } from "react-icons/fa6";
 // 1. Make sure to import NavLink and useLocation
 import { NavLink, useLocation } from "react-router-dom";
@@ -20,9 +20,7 @@ const Sidebar = () => {
     return (
         <div className="sidebar">
             {/* 2. Wrap the logo in a NavLink to make it a clickable link to the homepage */}
-            <NavLink to="/" className="sidebarEle logo">
-                <BiLogoYoutube />
-            </NavLink>
+
 
             {/* 3. Each navigation item is a NavLink with a 'to' prop for the path */}
 

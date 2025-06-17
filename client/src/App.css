@@ -1,6 +1,6 @@
 :root {
-  --default-color: #752641;
-  --placeholder: #8A8A8A;
+  --default-color: #7602c9;
+  --placeholder: #aeacac;
   --background: #fafafa;
   --darker-gray: #f1f0f0;
 }
@@ -36,8 +36,9 @@
   width: 100%;
   height: 180px;
   object-fit: cover;
-  background-color: #000;
+  background-color: var(--placeholder);
   border-radius: 10px;
+  transition: all 0.5s ease-in-out;
 }
 
 .meta {
@@ -99,7 +100,7 @@
 }
 
 .subscribe-btn {
-  background: black;
+  background: var(--default-color);
   color: white;
 }
 
@@ -122,6 +123,7 @@
   font-size: 1rem;
   transition: all 0.2s ease;
   cursor: pointer;
+  position: relative;
 }
 
 .likeBtn:hover {
@@ -131,7 +133,7 @@
 }
 
 .liked {
-  background: black;
+  background: var(--default-color);
   color: white;
 }
 
@@ -188,4 +190,38 @@
 
 .homeUploader {
   margin-bottom: 10px;
+}
+
+.confetti-particle {
+  position: absolute;
+  /* We'll set background-color dynamically in JS */
+  border-radius: 2px;
+  /* Small border-radius for slightly rounded rectangles */
+  opacity: 0;
+  /* Start invisible */
+  transform: scale(0) rotate(0deg);
+  /* Start small and unrotated */
+  pointer-events: none;
+  /* Ensure they don't block clicks */
+  will-change: transform, opacity;
+  /* Optimize for animation */
+}
+
+/* Confetti Animation Keyframes */
+@keyframes confetti-burst {
+  0% {
+    transform: translate(0, 0) scale(0) rotate(0deg);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+    /* Quickly become visible */
+  }
+
+  100% {
+    /* These values will be dynamic based on JS, but here's the concept */
+    transform: translate(var(--end-x, 0px), var(--end-y, -50px)) scale(0.8) rotate(var(--rotate-deg, 360deg));
+    opacity: 0;
+  }
 }

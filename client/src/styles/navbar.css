@@ -1,9 +1,9 @@
 .navbar {
     height: 60px;
-    width: calc(100% - 100px);
+    width: calc(100% - 32px);
     position: fixed;
     top: 0;
-    left: 60px;
+    left: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -133,4 +133,60 @@
 .btns-profile button {
     border-radius: 5px;
     padding: 10px 15px;
+}
+
+.logo {
+    height: 40px;
+
+
+}
+
+.account-switch-section {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: calc(100% - 32px);
+}
+
+.account-switch-section button {
+    padding: 0;
+    margin: 0;
+    color: rgb(0, 106, 255);
+}
+
+.switch-account-item {
+    display: flex;
+    width: calc(100% - 32px);
+    height: 50px;
+    justify-content: space-between;
+    border-radius: 15px;
+    align-items: center;
+    padding: 8px 16px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.switch-account-item:hover {
+    background: #f5f5f5;
+}
+
+.switch-account-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.switch-account-left img {
+    height: 25px;
+    border-radius: 50px;
+}
+
+.remove-account {
+    margin: 0;
+    padding: 0;
+}
+
+.account-switch-section button:hover {
+    background: transparent;
 }
