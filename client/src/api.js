@@ -55,8 +55,16 @@ export const uploadVideo = async (formData, token) => {
         },
         body: formData,
     });
-    return res.json();
+
+    if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const message = errData.message || `Upload failed with status ${res.status}`;
+        throw new Error(message);
+    }
+
+    return res.json(); // safe to parse here
 };
+
 
 export const deleteVideo = async (id, token) => {
     const res = await fetch(`${API_BASE}/videos/${id}`, {

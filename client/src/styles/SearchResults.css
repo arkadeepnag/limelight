@@ -5,9 +5,17 @@
     align-items: flex-start;
     justify-content: flex-start;
     width: 100%;
-    gap: 20px;
+    gap: 40px;
     text-decoration: none;
     color: #444444;
+
+
+}
+
+.result {
+    padding: 20px 0;
+    border-bottom: 1px solid #eee;
+    margin: 0 0 20px 0;
 }
 
 ul {
@@ -16,8 +24,8 @@ ul {
 }
 
 .thumbnailSearch {
-    width: 240px;
-    height: 140px;
+    width: 500px;
+    height: 300px;
     object-fit: cover;
     border-radius: 10px;
 }

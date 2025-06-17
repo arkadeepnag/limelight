@@ -342,140 +342,238 @@ const extractHashtags = (text) => {
   const matches = text.match(hashtagRegex) || [];
   return matches.map(tag => tag.substring(1).toLowerCase());
 };
-
 export const uploadVideo = async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders(); // make sure headers are flushed
+
+  const sendProgress = (message, percent = 0) => {
+    const payload = { message, percent };
+    console.log('SSE:', payload); // ✅ log server-sent events
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
   try {
+    console.log('📥 Upload request received');
+
+    console.log('🧪 Checking request body and files...');
+    console.log('req.body:', req.body);
+    console.log('req.files:', req.files);
+
     const { title, description } = req.body;
     const videoFile = req.files?.video?.[0];
-    if (!videoFile) return res.status(400).json({ message: 'No video file uploaded' });
-
     const thumbnailFile = req.files?.thumbnail?.[0];
-    const originalPath = videoFile.path;
+
+    if (!videoFile) {
+      sendProgress('❌ No video file uploaded', 0);
+      console.error('❌ No video file present in request');
+      return res.end();
+    }
+
     const videoId = Date.now().toString();
+    const ext = path.extname(videoFile.originalname);
+
+    // Save original video
+    const originalDir = path.join('uploads', 'originals');
+    const originalPath = path.join(originalDir, `${videoId}${ext}`);
+    const fullPath = path.join(originalDir, `${videoId}${ext}`);
+
+    await fs.ensureDir(originalDir);
+    await fs.move(videoFile.path, originalPath);
+
+    console.log('📁 Video saved to', originalPath);
+    sendProgress('✅ Video uploaded', 10);
+
+    // HLS conversion
     const videoDir = path.join('uploads', 'hls', videoId);
     await fs.ensureDir(videoDir);
 
-    // 🔁 HLS conversion
-    const tasks = Object.entries(resolutions).map(([label, size]) => {
-      return new Promise((resolve, reject) => {
-        const resDir = path.join(videoDir, label);
-        fs.ensureDirSync(resDir);
-        ffmpeg(originalPath)
-          .videoCodec('libx264')
-          .audioCodec('aac')
-          .size(size)
-          .outputOptions([
-            '-preset veryfast',
-            '-g 48',
-            '-sc_threshold 0',
-            '-c:v libx264',
-            '-c:a aac',
-            '-ar 48000',
-            `-vf scale=${size}`,
-            '-crf 20',
-            '-hls_time 4',
-            '-hls_playlist_type vod',
-            `-hls_segment_filename ${resDir}/%03d.ts`,
-          ])
-          .output(path.join(resDir, 'index.m3u8'))
-          .on('end', resolve)
-          .on('error', reject)
-          .run();
-      });
-    });
+    sendProgress('⏳ Starting HLS conversion', 15);
+    console.log('🎞️ Starting HLS conversion for', originalPath);
 
-    const hlsResults = await Promise.allSettled(tasks);
-    const failed = hlsResults.filter(result => result.status === 'rejected');
-    if (failed.length === resolutions.length) throw new Error('HLS encoding failed for all resolutions');
+    const hlsResults = await Promise.allSettled(
+      Object.entries(resolutions).map(([label, size]) => {
+        return new Promise((resolve, reject) => {
+          const resDir = path.join(videoDir, label);
+          fs.ensureDirSync(resDir);
+          console.log(`⚙️ Starting FFmpeg for ${label} (${size})`);
 
-    // 📄 Master playlist
-    const masterPlaylist = Object.keys(resolutions).map(label => {
-      const bandwidth = {
-        '360p': 800000,
-        '480p': 1400000,
-        '720p': 2800000,
-        '1080p': 5000000,
-      }[label];
-      return `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolutions[label]}\n${label}/index.m3u8`;
-    }).join('\n');
-    const masterPlaylistPath = path.join(videoDir, 'master.m3u8');
-    await fs.writeFile(masterPlaylistPath, '#EXTM3U\n' + masterPlaylist);
+          ffmpeg(originalPath)
+            .videoCodec('libx264')
+            .audioCodec('aac')
+            .size(size)
+            .outputOptions([
+              '-preset veryfast',
+              '-g 48',
+              '-sc_threshold 0',
+              '-c:v libx264',
+              '-c:a aac',
+              '-ar 48000',
+              `-vf scale=${size}`,
+              '-crf 20',
+              '-hls_time 4',
+              '-hls_playlist_type vod',
+              `-hls_segment_filename ${resDir}/%03d.ts`,
+            ])
+            .output(path.join(resDir, 'index.m3u8'))
+            .on('end', () => {
+              console.log(`✅ FFmpeg finished for ${label}`);
+              resolve(label);
+            })
+            .on('error', (err) => {
+              console.error(`❌ FFmpeg error for ${label}:`, err.message);
+              reject(err);
+            })
+            .run();
+        });
+      })
+    );
 
-    // 📸 Thumbnail
+    const availableQualities = Object.keys(resolutions).filter((_, i) => hlsResults[i].status === 'fulfilled');
+    sendProgress(`✅ HLS conversion done (${availableQualities.join(', ')})`, 40);
+
+    // Master playlist
+    try {
+      const masterPlaylist = availableQualities.map(label => {
+        const bandwidth = {
+          '360p': 800000,
+          '480p': 1400000,
+          '720p': 2800000,
+          '1080p': 5000000,
+        }[label];
+
+        return `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolutions[label]}\n${label}/index.m3u8`;
+      }).join('\n');
+
+      const masterPlaylistPath = path.join(videoDir, 'master.m3u8');
+      await fs.writeFile(masterPlaylistPath, '#EXTM3U\n' + masterPlaylist);
+      console.log('📄 Master playlist written to', masterPlaylistPath);
+    } catch (err) {
+      console.error('⚠️ Master playlist generation failed:', err.message);
+    }
+
+    // Thumbnail
     const thumbnailDir = path.join('uploads', 'thumbnails');
     await fs.ensureDir(thumbnailDir);
+    let thumbnailPath = path.join(thumbnailDir, `${videoId}.jpg`);
 
-    let thumbnailPath;
-    if (thumbnailFile) {
-      const ext = path.extname(thumbnailFile.originalname);
-      thumbnailPath = path.join(thumbnailDir, `${videoId}${ext}`);
-      await fs.move(thumbnailFile.path, thumbnailPath, { overwrite: true });
-    } else {
-      thumbnailPath = path.join(thumbnailDir, `${videoId}.jpg`);
-      await new Promise((resolve, reject) => {
-        ffmpeg(originalPath)
-          .on('end', resolve)
-          .on('error', reject)
-          .screenshots({
-            count: 1,
-            filename: `${videoId}.jpg`,
-            folder: thumbnailDir,
-            size: '320x?',
-          });
-      });
+    try {
+      if (thumbnailFile) {
+        const tExt = path.extname(thumbnailFile.originalname);
+        thumbnailPath = path.join(thumbnailDir, `${videoId}${tExt}`);
+        await fs.move(thumbnailFile.path, thumbnailPath, { overwrite: true });
+        console.log('🖼️ Custom thumbnail saved to', thumbnailPath);
+      } else {
+        await new Promise((resolve, reject) => {
+          ffmpeg(originalPath)
+            .on('end', () => {
+              console.log('🖼️ Auto thumbnail generated');
+              resolve();
+            })
+            .on('error', (err) => {
+              console.error('❌ Thumbnail generation error:', err.message);
+              reject(err);
+            })
+            .screenshots({
+              count: 1,
+              filename: `${videoId}.jpg`,
+              folder: thumbnailDir,
+              size: '320x?',
+            });
+        });
+      }
+      sendProgress('✅ Thumbnail generated', 65);
+    } catch (err) {
+      sendProgress('⚠️ Thumbnail generation failed', 65);
+      console.error('⚠️ Thumbnail generation error:', err.message);
     }
 
-    // 🧠 Metadata
-    const metadata = await new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(originalPath, (err, data) => {
-        if (err) return reject(err);
-        const videoStream = data.streams.find(s => s.codec_type === 'video');
-        const duration = Number(data.format.duration);
-        const bitrate = Number(videoStream?.bit_rate);
-        resolve({
-          duration: isNaN(duration) ? 0 : duration,
-          codec: videoStream?.codec_name || 'unknown',
-          bitrate: isNaN(bitrate) ? 0 : bitrate,
-          resolution: videoStream?.width && videoStream?.height
-            ? `${videoStream.width}x${videoStream.height}` : 'unknown',
+    // Metadata
+    let metadata = {
+      duration: 0,
+      codec: 'unknown',
+      bitrate: 0,
+      resolution: 'unknown',
+    };
+
+    try {
+      metadata = await new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(originalPath, (err, data) => {
+          if (err) return reject(err);
+          const videoStream = data.streams.find(s => s.codec_type === 'video');
+          const duration = Number(data.format.duration);
+          const bitrate = Number(videoStream?.bit_rate);
+
+          resolve({
+            duration: isNaN(duration) ? 0 : duration,
+            codec: videoStream?.codec_name || 'unknown',
+            bitrate: isNaN(bitrate) ? 0 : bitrate,
+            resolution: videoStream?.width && videoStream?.height
+              ? `${videoStream.width}x${videoStream.height}` : 'unknown',
+          });
         });
       });
-    });
 
-    // 🧠 Transcript generation
-    let transcript = null;
-    try {
-      transcript = await generateTranscript(originalPath, videoId);
+      console.log('📊 Metadata extracted:', metadata);
+      sendProgress('✅ Metadata extracted', 75);
     } catch (err) {
-      console.error('Transcript error:', err.message);
+      console.error('⚠️ Metadata extraction failed:', err.message);
+      sendProgress('⚠️ Metadata extraction failed', 75);
     }
 
-    // 🏷️ Hashtags
+    // Hashtags
     const hashtags = extractHashtags(description);
+    console.log('🏷️ Hashtags extracted:', hashtags);
 
-    // 💾 Save to DB
+    let transcript = null;
+
+    try {
+      console.log(`📝 Generating transcript for video: ${videoId}`);
+      transcript = await generateTranscript(fullPath, videoId);
+
+      if (!transcript || transcript.length === 0) {
+        console.warn(`⚠️ No transcript generated for video: ${videoId}`);
+      } else {
+        console.log(`✅ Transcript generated for video ${videoId}:`);
+        console.dir(transcript, { depth: null, colors: true }); // Pretty print JSON
+      }
+    } catch (err) {
+      console.error(`❌ Error generating transcript for video ${videoId}:`, err.message);
+    }
+
+
+    // Save to DB
     const newVideo = new Video({
       title,
       description,
       hlsFolder: videoId,
       uploadedBy: req.userId,
-      availableQualities: Object.keys(resolutions),
+      availableQualities,
       thumbnailPath,
       duration: metadata.duration,
       codec: metadata.codec,
       bitrate: metadata.bitrate,
       resolution: metadata.resolution,
       hashtags,
-      transcript,
+      transcript, // if you plan to add transcript
     });
 
     await newVideo.save();
-    res.status(201).json(newVideo);
-  } catch (error) {
-    console.error('Upload failed:', error);
-    res.status(500).json({ message: error.message || 'Upload failed' });
+    console.log('💾 Video saved to DB:', newVideo._id);
+    sendProgress('✅ Video saved to database', 95);
+
+    sendProgress('🎉 Upload complete', 100);
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+
+  } catch (err) {
+    console.error('❌ Upload failed:', err.stack);
+    sendProgress(`❌ Upload failed: ${err.message}`, 0);
+    res.end();
   }
 };
+
 
 
 // ... (deleteVideo - consider also deleting the video file and thumbnail from disk)
@@ -715,19 +813,32 @@ export const watchVideo = async (req, res) => {
 export const Search = async (req, res) => {
   const { q } = req.query;
 
+  if (!q || typeof q !== 'string') {
+    return res.status(400).json({ message: 'Query parameter "q" is required' });
+  }
+
   try {
+    const regex = new RegExp(q, 'i'); // case-insensitive regex
+
+    // Step 1: Find users matching the query by name
+    const matchedUsers = await User.find({ name: regex }, '_id');
+    const userIds = matchedUsers.map(user => user._id);
+
+    // Step 2: Search videos by title, description, tags, or uploader's name
     const results = await Video.find({
       $or: [
-        { title: new RegExp(q, 'i') },        // Case-insensitive title search
-        { description: new RegExp(q, 'i') },  // Case-insensitive description search
-        { tags: { $in: [new RegExp(q, 'i')] } }
+        { title: regex },
+        { description: regex },
+        { tags: { $in: [regex] } },
+        { uploadedBy: { $in: userIds } }
       ]
-    }).populate('uploadedBy', 'name profilePicture subscribers')
+    })
+      .populate('uploadedBy', 'name profilePicture subscribers')
       .lean(); // lean returns plain JS objects
 
     res.json(results);
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error during search');
+    console.error('❌ Search error:', err);
+    res.status(500).json({ message: 'Error during search' });
   }
 };

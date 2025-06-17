@@ -79,7 +79,7 @@ mongoose.connect(process.env.MONGO_URI)
         console.log(`Server running on port ${PORT} (Worker ${process.pid})`);
       });
     }
-    startTrendingJob();
+    // startTrendingJob();
 
 
 

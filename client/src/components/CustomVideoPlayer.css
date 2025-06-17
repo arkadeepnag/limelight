@@ -86,7 +86,7 @@
     appearance: none;
     width: 14px;
     height: 14px;
-    background: linear-gradient(to right, #007bff, #6f42c4);
+    background: #F2A224;
     /* A gradient from a vibrant blue to a deep purple */
 
     border-radius: 50%;
@@ -103,7 +103,7 @@
 .timeline::-moz-range-thumb {
     width: 14px;
     height: 14px;
-    background: linear-gradient(to right, #007bff, #6f42c4);
+    background: #F2A224;
     /* A gradient from a vibrant blue to a deep purple */
 
     border-radius: 50%;
@@ -123,7 +123,7 @@
 }
 
 .timeline::-moz-range-progress {
-    background: linear-gradient(to right, #007bff, #6f42c4);
+    background: #F2A224;
     /* A gradient from a vibrant blue to a deep purple */
 
     height: 100%;
@@ -363,4 +363,33 @@ input[type="range" i] {
 
 .seek-feedback.forward {
     right: 20%;
+}
+
+.custom-captions {
+    position: absolute;
+    bottom: 40px;
+    /* When controls are hidden */
+    transition: bottom 0.3s ease;
+    width: 90%;
+    text-align: center;
+    font-size: 1.2rem;
+    color: white;
+    text-shadow: 0 0 8px black;
+    pointer-events: none;
+    left: 50%;
+    transform: translateX(-50%);
+    line-height: 1.6;
+}
+
+.custom-captions.show-controls {
+    bottom: 100px;
+    /* When controls are visible */
+}
+
+.custom-captions span {
+    display: inline-block;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    margin: 0.2rem 0;
 }

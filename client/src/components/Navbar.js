@@ -70,14 +70,17 @@ const Navbar = () => {
                             <div className="current-user">
                                 <img src={userData.profilePicture} alt="Profile" className="dropdown-profile-pic" />
                                 <div className="user-info">
-                                    <strong>{userData.name}</strong>
+                                    <p>{userData.name}</p>
+                                    <span>{userData.username}</span>
 
                                 </div>
                             </div>
 
-                            <button onClick={handleProfileClick}>👤 Profile</button>
-                            <button onClick={handleHistoryClick}>🕓 Watch History</button>
-                            <button onClick={handleLogout}>🚪 Logout</button>
+                            <div className="btns-profile">
+                                <button onClick={handleProfileClick}>Profile</button>
+                                <button onClick={handleHistoryClick}>Watch History</button>
+                                <button onClick={handleLogout}>Logout</button>
+                            </div>
 
                             <hr />
 

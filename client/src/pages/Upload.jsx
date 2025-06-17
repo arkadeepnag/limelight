@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { uploadVideo } from '../api';
-
 import { useAuth } from '../context/AuthContext';
+
 const Upload = () => {
+    const API_BASE = 'http://localhost:5000/api';
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [file, setFile] = useState(null);
     const [thumbnail, setThumbnail] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [progress, setProgress] = useState(null);
+    const [message, setMessage] = useState('');
     const [videoInfo, setVideoInfo] = useState(null);
-    const navigate = useNavigate();
 
-    const { auth, logout } = useAuth();
+    const navigate = useNavigate();
+    const { auth } = useAuth();
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -36,14 +39,58 @@ const Upload = () => {
         }
 
         setUploading(true);
+        setProgress(0);
+        setMessage('Uploading...');
+
         try {
-            const videoData = await uploadVideo(formData, token);
-            setVideoInfo(videoData);
-            alert('Upload successful!');
-            navigate(`/video/${videoData._id}`);
+            const res = await fetch(`${API_BASE}/videos/upload`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+                body: formData,
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || `Upload failed with status ${res.status}`);
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                let parts = buffer.split('\n\n');
+                buffer = parts.pop(); // leave incomplete chunk
+
+                for (const part of parts) {
+                    const match = part.match(/^data:\s*(.*)$/m);
+                    if (match) {
+                        const json = JSON.parse(match[1]);
+                        if (json.message) setMessage(json.message);
+                        if (json.percent != null) setProgress(json.percent);
+                        if (json.done) {
+                            // Upload finished, now refetch final JSON
+                            const finalJson = await res.json().catch(() => null);
+                            if (finalJson) {
+                                setVideoInfo(finalJson);
+                                navigate(`/video/${finalJson._id}`);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            setMessage('✅ Upload complete');
+            setProgress(100);
         } catch (err) {
-            alert('Upload failed.');
-            console.error(err);
+            setMessage(`❌ Upload failed: ${err.message}`);
         } finally {
             setUploading(false);
         }
@@ -85,6 +132,13 @@ const Upload = () => {
                     {uploading ? 'Uploading...' : 'Upload'}
                 </button>
             </form>
+
+            {progress !== null && (
+                <div style={{ marginTop: '20px' }}>
+                    <p>{message}</p>
+                    <progress value={progress} max="100" style={{ width: '100%' }} />
+                </div>
+            )}
 
             {videoInfo && (
                 <div style={{ marginTop: '20px' }}>

@@ -31,7 +31,7 @@ const videoSchema = new mongoose.Schema({
   }],
   hashtags: { type: [String], index: true },
   trendingScore: { type: Number, default: 0, index: true },
-  transcript: { type: String },
+  transcript: { type: [Object], default: [] },
   captionPath: { type: String },
   comments: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

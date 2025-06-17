@@ -353,7 +353,7 @@ const VideoPage = () => {
         <div className="videopageContainer">
             <div style={{ maxWidth: '900px' }} className="videoContainer">
                 {video && (
-                    <CustomVideoPlayer src={`http://localhost:5000/api/videos/${video._id}/master.m3u8`} />
+                    <CustomVideoPlayer src={`http://localhost:5000/api/videos/${video._id}/master.m3u8`} transcript={video.transcript || []} />
                 )}
 
                 <h1 className="titleVideo">{video.title}</h1>
@@ -399,7 +399,20 @@ const VideoPage = () => {
                 </div>
                 <div className="description">
                     <p>Uploaded <span className="date">{timeSinceUpload(video.createdAt)}</span></p>
-                    <p>{video.description}</p>
+                    <p>
+                        {video.description.split(/(\s+)/).map((word, idx) => {
+                            if (word.startsWith('#')) {
+                                const tag = word.slice(1);
+                                return (
+                                    <a key={idx} href={`/tags/${tag}`} style={{ color: '#007bff' }}>
+                                        {word}
+                                    </a>
+                                );
+                            }
+                            return word;
+                        })}
+                    </p>
+
                 </div>
             </div>
 
@@ -410,7 +423,7 @@ const VideoPage = () => {
                     <input
                         value={comment}
                         onChange={handleCommentChange}
-                        placeholder="Add a comment (max 150 chars, no links/bad words)..."
+                        placeholder="Add a comment"
                         required
                         className={(extraChars > 0 || hasLinks || hasBadWords) ? 'input-error' : ''}
 

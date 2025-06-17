@@ -3,12 +3,13 @@ import Hls from 'hls.js';
 import {
     FaAngleLeft, FaAngleRight
 } from 'react-icons/fa';
-import { BiPlay, BiSolidVolumeFull, BiSolidVolumeMute, BiSliderAlt, BiExpandAlt, BiExitFullscreen, BiPause, BiFastForward, BiRewind } from "react-icons/bi";
-
+import {
+    BiPlay, BiSolidVolumeFull, BiSolidVolumeMute, BiSliderAlt,
+    BiExpandAlt, BiExitFullscreen, BiPause, BiFastForward, BiRewind, BiCaptions
+} from "react-icons/bi";
 
 import './CustomVideoPlayer.css';
 
-// --- Helper function to format time in MM:SS format ---
 const formatTime = (timeInSeconds) => {
     const seconds = Math.floor(timeInSeconds);
     const minutes = Math.floor(seconds / 60);
@@ -16,21 +17,23 @@ const formatTime = (timeInSeconds) => {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
-const CustomVideoPlayer = ({ src, poster = '' }) => {
-    // --- Refs for DOM Elements ---
+const convertToSeconds = (hhmmss) => {
+    const [h, m, s] = hhmmss.split(':').map(Number);
+    return h * 3600 + m * 60 + s;
+};
+
+const CustomVideoPlayer = ({ src, poster = '', transcript = [] }) => {
     const videoRef = useRef(null);
     const playerContainerRef = useRef(null);
     const timelineRef = useRef(null);
     const settingsPanelRef = useRef(null);
     const settingsButtonRef = useRef(null);
 
-    // --- Refs for Logic ---
     const controlsTimeoutRef = useRef(null);
     const hlsRef = useRef(null);
 
-    // --- Player State ---
     const [isPlaying, setIsPlaying] = useState(false);
-    const [isMuted, setIsMuted] = useState(true); // Start muted for autoplay
+    const [isMuted, setIsMuted] = useState(true);
     const [volume, setVolume] = useState(1);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -38,65 +41,70 @@ const CustomVideoPlayer = ({ src, poster = '' }) => {
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1);
 
-    // --- HLS Quality State ---
     const [qualityOptions, setQualityOptions] = useState([]);
-    const [currentQuality, setCurrentQuality] = useState(-1); // -1 for auto
+    const [currentQuality, setCurrentQuality] = useState(-1);
 
-    // --- UI State ---
     const [showControls, setShowControls] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
-    const [settingsView, setSettingsView] = useState('main'); // 'main', 'quality', or 'speed'
+    const [settingsView, setSettingsView] = useState('main');
     const [seekFeedback, setSeekFeedback] = useState({ show: false, type: 'forward' });
 
-    // --- Effect for HLS.js Initialization and Video Event Listeners ---
+    const [captionsEnabled, setCaptionsEnabled] = useState(true);
+    const [currentCaption, setCurrentCaption] = useState('');
+
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
 
-        const defaultOptions = {};
-        if (Hls.isSupported()) {
-            const hls = new Hls(defaultOptions);
-            hlsRef.current = hls;
-            hls.loadSource(src);
-            hls.attachMedia(video);
+        const hls = new Hls();
+        hlsRef.current = hls;
+        hls.loadSource(src);
+        hls.attachMedia(video);
 
-            hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-                const options = data.levels.map((level, index) => ({
-                    label: `${level.height}p`,
-                    value: index
-                }));
-                setQualityOptions([{ label: 'Auto', value: -1 }, ...options]);
-                setCurrentQuality(hls.currentLevel);
-            });
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = src;
-        }
+        hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+            const options = data.levels.map((level, index) => ({
+                label: `${level.height}p`,
+                value: index
+            }));
+            setQualityOptions([{ label: 'Auto', value: -1 }, ...options]);
+            setCurrentQuality(hls.currentLevel);
+        });
 
-        // Set muted to true initially for autoplay
         video.muted = true;
         setIsMuted(true);
 
-        // Attempt to play the video as soon as it's ready
-        const attemptAutoplayAndUnmute = () => {
-            video.play().then(() => {
-
-            }).catch(error => {
-                // Autoplay was prevented. User interaction is required.
+        const attemptAutoplay = () => {
+            video.play().catch(error => {
                 console.warn('Autoplay prevented:', error);
-                setIsPlaying(false); // Ensure play button is visible
+                setIsPlaying(false);
             });
         };
 
-        // Listen for canplaythrough event to attempt autoplay
-        video.addEventListener('canplaythrough', attemptAutoplayAndUnmute);
+        video.addEventListener('canplaythrough', attemptAutoplay);
 
+        const handleTimeUpdate = () => {
+            setCurrentTime(video.currentTime);
 
-        const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+            // Handle captions
+            if (captionsEnabled && transcript.length > 0) {
+                const activeCaption = transcript
+                    .map(item => ({ ...item, startSeconds: convertToSeconds(item.start) }))
+                    .filter(item => video.currentTime >= item.startSeconds)
+                    .pop();
+                setCurrentCaption(activeCaption?.text || '');
+            } else {
+                setCurrentCaption('');
+            }
+        };
+
         const handleDurationChange = () => setDuration(video.duration);
         const handlePlay = () => setIsPlaying(true);
         const handlePause = () => setIsPlaying(false);
         const handleVolumeChange = () => { setVolume(video.volume); setIsMuted(video.muted); };
-        const handleProgress = () => { if (video.buffered.length > 0) setBufferedTime(video.buffered.end(video.buffered.length - 1)); };
+        const handleProgress = () => {
+            if (video.buffered.length > 0)
+                setBufferedTime(video.buffered.end(video.buffered.length - 1));
+        };
         const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
 
         video.addEventListener('timeupdate', handleTimeUpdate);
@@ -116,19 +124,17 @@ const CustomVideoPlayer = ({ src, poster = '' }) => {
             video.removeEventListener('volumechange', handleVolumeChange);
             video.removeEventListener('progress', handleProgress);
             document.removeEventListener('fullscreenchange', handleFullscreenChange);
-            video.removeEventListener('canplaythrough', attemptAutoplayAndUnmute); // Clean up the event listener
+            video.removeEventListener('canplaythrough', attemptAutoplay);
         };
     }, [src]);
 
-    // --- Effect for Custom Timeline Fill ---
     useEffect(() => {
         const timeline = timelineRef.current;
         if (!timeline) return;
         const percentage = duration > 0 ? (currentTime / duration) * 100 : 0;
-        timeline.style.background = `linear-gradient(to right, #007bff ${percentage}%, rgba(255, 255, 255, 0.4) ${percentage}%)`;
+        timeline.style.background = `linear-gradient(to right, #F2A224 ${percentage}%, rgba(255, 255, 255, 0.4) ${percentage}%)`;
     }, [currentTime, duration]);
 
-    // --- Effect for Keyboard Controls ---
     useEffect(() => {
         const player = playerContainerRef.current;
         if (!player) return;
@@ -145,6 +151,7 @@ const CustomVideoPlayer = ({ src, poster = '' }) => {
                 case 'arrowdown': videoRef.current.volume = Math.max(0, videoRef.current.volume - 0.1); break;
                 case 'm': toggleMute(); break;
                 case '0': videoRef.current.currentTime = 0; break;
+                case 'c': setCaptionsEnabled(prev => !prev); break;
                 default: break;
             }
         };
@@ -152,7 +159,6 @@ const CustomVideoPlayer = ({ src, poster = '' }) => {
         return () => player.removeEventListener('keydown', handleKeyDown);
     }, [duration]);
 
-    // --- Effect for Closing Settings on Outside Click ---
     useEffect(() => {
         const handleOutsideClick = (event) => {
             if (showSettings && settingsPanelRef.current && !settingsPanelRef.current.contains(event.target) && settingsButtonRef.current && !settingsButtonRef.current.contains(event.target)) {
@@ -163,12 +169,10 @@ const CustomVideoPlayer = ({ src, poster = '' }) => {
         return () => document.removeEventListener('mousedown', handleOutsideClick);
     }, [showSettings]);
 
-    // --- Effect to Reset Settings View When Panel is Closed ---
     useEffect(() => {
         if (!showSettings) setSettingsView('main');
     }, [showSettings]);
 
-    // --- UI Handlers ---
     const handleMouseMove = () => {
         setShowControls(true);
         if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
@@ -221,18 +225,30 @@ const CustomVideoPlayer = ({ src, poster = '' }) => {
             onContextMenu={handleContextMenu}
         >
             <video ref={videoRef} poster={poster} onClick={togglePlayPause} muted={isMuted} />
+            {captionsEnabled && currentCaption && (
+                <div className={`custom-captions ${showControls ? 'show-controls' : ''}`}>
+                    {currentCaption.split('\n').map((line, idx) => (
+                        <span key={idx}>{line}</span>
+                    ))}
+                </div>
+            )}
 
-            {!isPlaying && <div className="central-play-button" onClick={togglePlayPause} ><BiPlay /></div>}
+
+
+            {!isPlaying && <div className="central-play-button" onClick={togglePlayPause}><BiPlay /></div>}
 
             <div className={`seek-feedback backward ${seekFeedback.show && seekFeedback.type === 'backward' ? 'visible' : ''}`}><BiRewind /></div>
             <div className={`seek-feedback forward ${seekFeedback.show && seekFeedback.type === 'forward' ? 'visible' : ''}`}><BiFastForward /></div>
 
             <div className="controls-container">
+
+
                 <div className="timeline-container">
                     <div className="timeline-buffered" style={{ width: `${(bufferedTime / duration) * 100}%` }}></div>
                     <input ref={timelineRef} type="range" min="0" max={duration || 0} value={currentTime} onChange={handleSeek} className="timeline" />
                 </div>
                 <div className="bottom-controls">
+
                     <div className="controls-left">
                         <button className="control-button" onClick={togglePlayPause} style={{ fontSize: "2.2rem" }}>{isPlaying ? <BiPause /> : <BiPlay />}</button>
                         <div className="volume-control">
@@ -271,6 +287,9 @@ const CustomVideoPlayer = ({ src, poster = '' }) => {
                                 </div>
                             )}
                         </div>
+                        <button className="control-button" onClick={() => setCaptionsEnabled(prev => !prev)}>
+                            <BiCaptions color={captionsEnabled ? "#F2A224" : "#999"} />
+                        </button>
                         <button className="control-button" onClick={toggleFullscreen}>{isFullscreen ? <BiExitFullscreen /> : <BiExpandAlt />}</button>
                     </div>
                 </div>

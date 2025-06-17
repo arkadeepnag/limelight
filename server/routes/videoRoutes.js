@@ -22,11 +22,35 @@ import {
 const router = express.Router();
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
+  destination: (req, file, cb) => {
+    console.log(`📁 Saving "${file.originalname}" to uploads/`);
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + path.extname(file.originalname);
+    console.log(`📝 Naming file: ${file.originalname} -> ${uniqueName}`);
+    cb(null, uniqueName);
+  }
 });
 
-const upload = multer({ storage });
+// ✅ File type filter (optional but recommended)
+const fileFilter = (req, file, cb) => {
+  console.log(`🔎 File received: ${file.fieldname} - ${file.originalname}`);
+  const allowedTypes = ['video/mp4', 'video/mkv', 'video/avi', 'image/jpeg', 'image/png'];
+  if (!allowedTypes.includes(file.mimetype)) {
+    const errorMsg = `❌ File type not allowed: ${file.mimetype}`;
+    console.error(errorMsg);
+    return cb(new Error(errorMsg), false);
+  }
+  cb(null, true);
+};
+
+// ✅ Set limits if needed (e.g., 1GB max size)
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 1 * 1024 * 1024 * 1024 }, // 1 GB
+});
 
 router.get('/', getAllVideos);
 router.get('/suggested', getSuggestedVideos);
@@ -34,10 +58,24 @@ router.get('/:id', getVideoById);
 router.post(
   '/upload',
   authenticate,
-  upload.fields([
-    { name: 'video', maxCount: 1 },
-    { name: 'thumbnail', maxCount: 1 }
-  ]),
+  (req, res, next) => {
+    console.log("Hellop")
+    const uploader = upload.fields([
+      { name: 'video', maxCount: 1 },
+      { name: 'thumbnail', maxCount: 1 },
+    ]);
+    uploader(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        console.error(`📦 Multer error: ${err.message}`);
+        return res.status(400).json({ success: false, message: `Multer error: ${err.message}` });
+      } else if (err) {
+        console.error(`🔥 Upload error: ${err.message}`);
+        return res.status(400).json({ success: false, message: `Upload error: ${err.message}` });
+      }
+      console.log('✅ Multer completed successfully');
+      next();
+    });
+  },
   uploadVideo
 );
 router.delete('/:id', authenticate, deleteVideo);
