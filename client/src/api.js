@@ -5,7 +5,14 @@ export const register = async (data) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
+        credentials: 'include', // important for cookies
     });
+
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || 'Registration failed');
+    }
+
     return res.json();
 };
 
@@ -14,8 +21,34 @@ export const login = async (data) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
+        credentials: 'include', // important for cookies
     });
+
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || 'Login failed');
+    }
+
     return res.json();
+};
+export const refreshToken = async () => {
+    try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include',
+        });
+        if (res.ok) {
+            const { accessToken, userId } = await res.json(); // ⬅️ must return both
+            localStorage.setItem('token', accessToken);
+            return { accessToken, userId };
+        } else {
+            console.error('Failed to refresh token');
+            return null;
+        }
+    } catch (err) {
+        console.error('Refresh failed:', err);
+        return null;
+    }
 };
 
 export const getVideos = async () => {
@@ -205,4 +238,36 @@ export const updateProfileImage = async (profilePicFile, bannerFile, userId, tok
         if (!res.ok) throw new Error('Failed to update profile images');
         return res.json();
     });
+};
+export const getWatchHistory = async (userId, token) => {
+    const res = await fetch(`${API_BASE}/user/${userId}/watch-history`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+        }
+    });
+
+    if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(`Failed to fetch watch history: ${error.message}`);
+    }
+
+    return res.json(); // returns list of watched videos
+};
+export const getSubscriptions = async (userId, token) => {
+    const res = await fetch(`${API_BASE}/user/${userId}/subscriptions`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+        }
+    });
+
+    if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(`Failed to fetch subscriptions: ${error.message}`);
+    }
+
+    return res.json(); // returns list of subscribed user profiles
 };

@@ -13,7 +13,7 @@ import videoRoutes from './routes/videoRoutes.js';
 import searchRoutes from './routes/search.js';
 import userRoutes from './routes/userRoutes.js';
 import { startTrendingJob } from './services/trendingService.js';
-
+import cookieParser from 'cookie-parser';
 
 const app = express();
 
@@ -23,8 +23,12 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 console.log("MONGO_URI loaded:", process.env.MONGO_URI);
 // Middleware
-app.use(cors());
-
+app.use(cors({
+  origin: 'http://localhost:3000', // frontend URL
+  credentials: true
+}));
+app.use(express.json());
+app.use(cookieParser());
 
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute

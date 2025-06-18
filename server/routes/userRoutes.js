@@ -97,7 +97,62 @@ router.get('/videos/:userId', async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
+// GET /api/users/watch-history
+router.get('/:id/watch-history', authenticate, async (req, res) => {
+    try {
+        const userId = req.params.id;
+
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({ message: 'Invalid user ID format' });
+        }
+
+        // Assuming your User schema has `watchHistory: [{ type: ObjectId, ref: 'Video' }]`
+        const user = await User.findById(userId)
+            .select('watchHistory')
+            .populate({
+                path: 'watchHistory.video',
+                // Select all the necessary fields from the Video schema
+                select: 'title description hlsFolder thumbnailPath duration resolution bitrate codec availableQualities uploadedBy viewCount viewedBy likes dislikes reports hashtags trendingScore transcript captionPath comments createdAt updatedAt',
+                populate: {
+                    path: 'uploadedBy',
+                    select: 'username profilePicture email' // Adjust according to your User schema
+                }
+            })
+            .lean();
 
 
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        res.json(user.watchHistory || []);
+    } catch (err) {
+        console.error('Error fetching watch history:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.get('/:id/subscriptions', authenticate, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Invalid user ID format' });
+        }
+
+        const user = await User.findById(id)
+            .select('subscriptions')
+            .populate({
+                path: 'subscriptions',
+                select: 'name username email profilePicture banner location about links subscribers createdAt' // Exclude video uploads
+            })
+            .lean();
+
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        res.json(user.subscriptions || []);
+    } catch (err) {
+        console.error('Error fetching subscriptions:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
 export default router;
 

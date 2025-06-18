@@ -6,7 +6,7 @@ import ffmpegStatic from 'ffmpeg-static';
 import ffprobeStatic from 'ffprobe-static';
 import path from 'path';
 import fs from 'fs-extra'; // For file system operations, e.g., deleting temp files
-
+import sharp from 'sharp';
 ffmpeg.setFfmpegPath(ffmpegStatic);
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 export const getAllVideos = async (req, res) => {
@@ -453,7 +453,6 @@ export const uploadVideo = async (req, res) => {
       console.error('⚠️ Master playlist generation failed:', err.message);
     }
 
-    // Thumbnail
     const thumbnailDir = path.join('uploads', 'thumbnails');
     await fs.ensureDir(thumbnailDir);
     let thumbnailPath = path.join(thumbnailDir, `${videoId}.jpg`);
@@ -462,19 +461,27 @@ export const uploadVideo = async (req, res) => {
       if (thumbnailFile) {
         const tExt = path.extname(thumbnailFile.originalname);
         thumbnailPath = path.join(thumbnailDir, `${videoId}${tExt}`);
-        await fs.move(thumbnailFile.path, thumbnailPath, { overwrite: true });
-        console.log('🖼️ Custom thumbnail saved to', thumbnailPath);
+
+        await sharp(thumbnailFile.path)
+          .resize(320)
+          .jpeg({ quality: 70 })
+          .toFile(thumbnailPath);
+
+        await fs.remove(thumbnailFile.path);
+        console.log('🖼️ Custom thumbnail compressed and saved to', thumbnailPath);
       } else {
         await new Promise((resolve, reject) => {
           ffmpeg(originalPath)
-            .on('end', () => {
+            .on('end', async () => {
               console.log('🖼️ Auto thumbnail generated');
+              const generatedPath = path.join(thumbnailDir, `${videoId}.jpg`);
+              await sharp(generatedPath)
+                .resize(320)
+                .jpeg({ quality: 70 })
+                .toFile(generatedPath);
               resolve();
             })
-            .on('error', (err) => {
-              console.error('❌ Thumbnail generation error:', err.message);
-              reject(err);
-            })
+            .on('error', (err) => reject(err))
             .screenshots({
               count: 1,
               filename: `${videoId}.jpg`,
@@ -483,11 +490,13 @@ export const uploadVideo = async (req, res) => {
             });
         });
       }
-      sendProgress('✅ Thumbnail generated', 65);
+
+      sendProgress('✅ Thumbnail generated and compressed', 65);
     } catch (err) {
+      console.error('⚠️ Thumbnail error:', err.message);
       sendProgress('⚠️ Thumbnail generation failed', 65);
-      console.error('⚠️ Thumbnail generation error:', err.message);
     }
+
 
     // Metadata
     let metadata = {
@@ -793,7 +802,7 @@ export const watchVideo = async (req, res) => {
       video.viewCount += 1;
       await video.save();
 
-      // Update user's watch history
+      // Add to watch history
       await User.findByIdAndUpdate(userId, {
         $push: {
           watchHistory: {
@@ -802,14 +811,25 @@ export const watchVideo = async (req, res) => {
           }
         }
       });
+    } else {
+      // Update watchedAt time in watch history if already viewed
+      await User.updateOne(
+        { _id: userId, 'watchHistory.video': videoId },
+        {
+          $set: {
+            'watchHistory.$.watchedAt': new Date()
+          }
+        }
+      );
     }
 
-    res.json({ message: 'View recorded (if new)', viewCount: video.viewCount });
+    res.json({ message: 'View recorded or time updated', viewCount: video.viewCount });
   } catch (err) {
     console.error('Error updating view:', err);
     res.status(500).json({ message: 'Failed to update view' });
   }
 };
+
 export const Search = async (req, res) => {
   const { q } = req.query;
 

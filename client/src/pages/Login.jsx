@@ -7,16 +7,19 @@ const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const { login } = useAuth();  // Use context login
+    const { login } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
+
         try {
             const data = await apiLogin({ email, password });
-            if (data.token && data._id) {
-                login({ token: data.token, userId: data._id });
+
+            if (data.accessToken && data.userId) {
+                // Save only access token (in memory/localStorage)
+                login({ token: data.accessToken, userId: data.userId });
                 navigate('/');
             } else {
                 alert(data.message || 'Login failed');
@@ -29,25 +32,29 @@ const Login = () => {
     };
 
     return (
-        <form onSubmit={handleSubmit}>
-            <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email"
-                type="email"
-                required
-            />
-            <input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                type="password"
-                placeholder="Password"
-                required
-            />
-            <button type="submit" disabled={loading}>
-                {loading ? 'Logging in...' : 'Login'}
-            </button>
-        </form>
+        <>
+            <h1>Log in to your account</h1>
+            <span>Welcome back! Please enter your details</span>
+            <form onSubmit={handleSubmit}>
+                <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Email"
+                    type="email"
+                    required
+                />
+                <input
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    type="password"
+                    placeholder="Password"
+                    required
+                />
+                <button type="submit" disabled={loading}>
+                    {loading ? 'Logging in...' : 'Login'}
+                </button>
+            </form>
+        </>
     );
 };
 

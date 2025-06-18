@@ -57,7 +57,7 @@ const Navbar = () => {
     };
 
     const handleProfileClick = () => navigate(`/channel/${auth?.userId}`);
-    const handleHistoryClick = () => navigate('/watch-history');
+    const handleHistoryClick = () => navigate('/library');
 
     return (
         <div className="navbar">

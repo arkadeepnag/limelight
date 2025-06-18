@@ -99,6 +99,10 @@ const VideoPage = () => {
                     likes: videoData.likes || [],
                     dislikes: videoData.dislikes || [],
                 });
+
+                // Set page title
+                document.title = `${videoData.title} | Limelight` || 'Video Page';
+
                 const commentsData = await getAllComments(id, commentLimit, 0, token);
                 setComments(commentsData.comments);
                 setSkip(commentLimit);
@@ -111,8 +115,17 @@ const VideoPage = () => {
         };
 
         fetchData();
-        if (token) watchVideo(id, token).catch(console.error);
+
+        if (token) {
+            watchVideo(id, token).catch(console.error);
+        }
+
+        // Cleanup: optionally reset title on unmount
+        return () => {
+            document.title = 'Limelight'; // or your default title
+        };
     }, [id, token, commentLimit]);
+
 
     useEffect(() => {
         if (!video) return;
